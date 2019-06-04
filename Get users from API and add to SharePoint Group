@@ -1,0 +1,97 @@
+## Script to get user accounts from API using tokens and to add them to SharePoint groups##
+
+#Set the token API url's and Id's
+param (
+   [string]$p_IdentityServerUrl = "URL".ToString(),
+   [string]$p_AssociateApiUrl = "URL".ToString(),
+   [string]$p_AssociateClientId = "GUID".ToString(),
+   [string]$p_AssociateClientSecret ="Secret Token".ToString(),
+   [string]$p_AssociateApiId = "GUID".ToString() 
+)
+
+Add-PSSnapin Microsoft.SharePoint.PowerShell
+
+#Set the variables
+$identityserverUrl = $p_IdentityServerUrl
+$tokenendpointurl = $identityserverUrl + "/connect/token"
+$granttype = "client_credentials" 
+$client_id = $p_AssociateClientId
+$client_secret = $p_AssociateClientSecret
+$scope = $p_AssociateApiId
+
+$clientApiUrl = $p_AssociateApiUrl
+
+#Fetch the token by passing the required parameters
+function FetchToken
+{
+    $body = @{
+        grant_type = $granttype
+        scope = $scope
+        client_id = $client_id
+        client_secret = $client_secret
+        username = $username
+        password = $password
+    }
+        
+    $resp = Invoke-RestMethod -Method Post -Body $body -Uri $tokenendpointurl      
+ 
+    return $resp.access_token
+}
+
+#Get reference to the site collection
+$web = Get-SPWeb "URL"
+
+#Get reference of the sharepoint group
+$Group= $web.Groups["SSC Members"]
+
+If($Group -ne $null)
+{
+    $GroupUsers = $Group.Users
+     
+    foreach ($User in $GroupUsers)
+    {
+        #Remove all users from sharepoint group
+        $Group.RemoveUser($User)
+        
+    }
+}
+
+#Invoke the API and get the data
+function invokeClientApi([string]$apiUrl, [string]$jwtToken)
+{
+    $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
+    $headers.Add("Authorization", 'Bearer ' + $jwtToken)
+
+
+    $response = Invoke-RestMethod $apiUrl -Headers $headers
+    
+
+    $filteredResponse = $response | Where {$_.store -eq "Holdings Headquarters" -and ($_.email -is [String] -and $_.email -ne [String]::Empty) }
+	
+    $empCount = 1
+    
+    $userdata =  $filteredResponse | ForEach-Object{ 
+ 
+        $FName = $_.PreferredFirstName
+        
+        $LN = $_.PreferredLastName
+        
+        $email = $_.email
+        
+      
+      $user = Get-SPUser -web $web -Limit ALL | Where-Object {$_.Email -eq $email} | select UserLogin 
+      if($user){
+        $sscuser = $web.EnsureUser($user.UserLogin)
+        $Group.AddUser($sscuser)
+      Write-host $empCount $sscuser
+      $empCount = $empCount + 1
+      }
+       
+          
+     }
+}
+
+
+$token = FetchToken    
+invokeClientApi -apiUrl $clientApiUrl -jwtToken $token
+
