@@ -1,0 +1,41 @@
+## Script to get users from AD and to add them to SharePoint group ##
+
+Add-PSSnapin Microsoft.SharePoint.PowerShell
+
+#Get reference of site collection
+$web = Get-SPWeb "URL"
+
+#Get reference of the ShrePoint group
+$Group= $web.Groups["Store Users"]
+
+If($Group -ne $null)
+{
+    $GroupUsers = $Group.Users
+     
+    foreach ($User in $GroupUsers)
+    {
+        #Remove all users from sharepoint group
+        $Group.RemoveUser($User)
+    }
+}
+
+
+#Get users from AD based on the provided OU
+$ADUsers = Get-ADGroupMember -Identity kg_store_users | Where-Object {$_.distinguishedName -notmatch "STORE FOOD USERS" -and $_.distinguishedName -notmatch "StorePCIUsers" -and $_.distinguishedName -notmatch "Test" } | Select-Object name, objectClass,distinguishedName
+
+$UserCount = 1
+
+foreach($user in $ADUsers)
+{
+$useremail = $user.name+"Domain"
+
+ $user = Get-SPUser -web $web -Limit ALL | Where-Object {$_.Email -eq $useremail} | select UserLogin 
+
+ #Add user to SharePoint group
+      if($user){
+       $storeuser = $web.EnsureUser($user.UserLogin)
+       $Group.AddUser($storeuser)
+       Write-Host $UserCount  $storeuser
+       $UserCount = $UserCount +1
+      }
+}
