@@ -1,0 +1,21 @@
+param (
+   [string]$Url = "Enter your site URL here",
+   [string]$Workflow = "Enter the name of Workflow"
+ )
+
+Add-PSSnapin Microsoft.SharePoint.PowerShell -erroraction SilentlyContinue
+[System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SharePoint")
+
+# get the workflow assocation from the target site/web
+
+$web = Get-SPWeb $Url
+
+$wfm = New-object Microsoft.SharePoint.WorkflowServices.WorkflowServicesManager($web)
+$sub = $wfm.GetWorkflowSubscriptionService()
+
+
+$wf = $sub.EnumerateSubscriptions() | ?{$_.Name -eq $Workflow }
+
+$workflowInstanceService = $wfm.GetWorkflowInstanceService()
+
+$workflowInstanceService.StartWorkflow($wf,$null)
